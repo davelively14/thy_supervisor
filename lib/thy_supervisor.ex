@@ -15,22 +15,17 @@ defmodule ThySupervisor do
     GenServer.call(supervisor, {:terminate_child, pid})
   end
 
+  # TODO why does this pass child_spec when it's not handled below?
+  def restart_child(supervisor, pid, child_spec) when is_pid(pid) do
+    GenServer.call(supervisor, {:restart_child, pid, child_spec})
+  end
+
   def count_children(supervisor) do
     GenServer.call(supervisor, :count_children)
   end
 
   def which_children(supervisor) do
     GenServer.call(supervisor, :which_children)
-  end
-
-  def terminate(_reason, state) do
-    terminate_children(state)
-    :ok
-  end
-
-  # TODO why does this pass child_spec when it's not handled below?
-  def restart_child(supervisor, pid, child_spec) when is_pid(pid) do
-    GenServer.call(supervisor, {:restart_child, pid, child_spec})
   end
 
   # Callback Functions
@@ -55,7 +50,7 @@ defmodule ThySupervisor do
     end
   end
 
-  # TODO Why doesn't this handle child_spec when it's passed above?
+  # TODO Why doesn't this accept child_spec when it's part of message sent above?
   def handle_call({:restart_child, old_pid}, _from, state) do
     case HashDict.fetch(state, old_pid) do
       {:ok, child_spec} ->
@@ -81,8 +76,9 @@ defmodule ThySupervisor do
     {:reply, state, state}
   end
 
-  # TODO Why do we handle state here and in handle_info? Seems repetitive.
+  # TODO Why do we change state here via terminate_child and in handle_info?
   def handle_call({:terminate_child, pid}, _from, state) do
+    # TODO Just call terminate_child(pid), handle an error. Let handle_info :killed manage state
     case terminate_child(pid) do
       :ok ->
         new_state = state |> HashDict.delete(pid)
@@ -92,13 +88,12 @@ defmodule ThySupervisor do
     end
   end
 
-  # TODO Comment this out to test redundancy theory. Looks like it is.
-  def handle_info({:EXIT, from, :killed}, state) do
+  def handle_info({:EXIT, from, :normal}, state) do
     new_state = state |> HashDict.delete(from)
     {:no_reply, new_state}
   end
 
-  def handle_info({:EXIT, from, :normal}, state) do
+  def handle_info({:EXIT, from, :killed}, state) do
     new_state = state |> HashDict.delete(from)
     {:no_reply, new_state}
   end
@@ -120,7 +115,23 @@ defmodule ThySupervisor do
     end
   end
 
+  def terminate(_reason, state) do
+    terminate_children(state)
+    :ok
+  end
+
   # Private functions
+
+  defp start_children([child_spec|rest]) do
+    case start_child(child_spec) do
+      {:ok, pid} ->
+        [{pid, child_spec}|start_children(rest)]
+        :error ->
+          :error
+        end
+      end
+
+  defp start_children([]), do: []
 
   defp start_child({mod, fun, args}) do
     case apply(mod, fun, args) do
@@ -128,15 +139,6 @@ defmodule ThySupervisor do
         Process.link(pid)
         {:ok, pid}
       _ ->
-        :error
-    end
-  end
-
-  defp start_children([child_spec|rest]) do
-    case start_child(child_spec) do
-      {:ok, pid} ->
-        [{pid, child_spec}|start_children(rest)]
-      :error ->
         :error
     end
   end
