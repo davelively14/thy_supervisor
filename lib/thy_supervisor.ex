@@ -37,6 +37,7 @@ defmodule ThySupervisor do
     end
   end
 
+  # Why do we handle state here and in handle_info? Seems repetitive.
   def handle_call({:terminate_child, pid}, _from, state) do
     case terminate_child(pid) do
       :ok ->
@@ -47,6 +48,7 @@ defmodule ThySupervisor do
     end
   end
 
+  # Comment this out to test redundancy theory. Looks like it is.
   def handle_info({:EXIT, from, :killed}, state) do
     new_state = state |> HashDict.delete(from)
     {:no_reply, new_state}
