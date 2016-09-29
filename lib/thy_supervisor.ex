@@ -98,6 +98,11 @@ defmodule ThySupervisor do
     {:no_reply, new_state}
   end
 
+  def handle_info({:EXIT, from, :normal}, state) do
+    new_state = state |> HashDict.delete(from)
+    {:no_reply, new_state}
+  end
+
   # Private functions
 
   defp start_child({mod, fun, args}) do
