@@ -19,6 +19,10 @@ defmodule ThySupervisor do
     GenServer.call(supervisor, :count_children)
   end
 
+  def which_children(supervisor) do
+    GenServer.call(supervisor, :which_children)
+  end
+
   # TODO why does this pass child_spec when it's not handled below?
   def restart_child(supervisor, pid, child_spec) when is_pid(pid) do
     GenServer.call(supervisor, {:restart_child, pid, child_spec})
@@ -66,6 +70,10 @@ defmodule ThySupervisor do
 
   def handle_call(:count_children, _from, state) do
     {:reply, HashDict.size(state), state}
+  end
+
+  def handle_call(:which_children, _from, state) do
+    {:reply, state, state}
   end
 
   # TODO Why do we handle state here and in handle_info? Seems repetitive.
