@@ -15,6 +15,15 @@ defmodule ThySupervisor do
     GenServer.call(supervisor, {:terminate_child, pid})
   end
 
+  def count_children(supervisor) do
+    GenServer.call(supervisor, :count_children)
+  end
+
+  # TODO why does this pass child_spec when it's not handled below?
+  def restart_child(supervisor, pid, child_spec) when is_pid(pid) do
+    GenServer.call(supervisor, {:restart_child, pid, child_spec})
+  end
+
   # Callback Functions
 
   def init([child_spec_list]) do
@@ -37,7 +46,29 @@ defmodule ThySupervisor do
     end
   end
 
-  # Why do we handle state here and in handle_info? Seems repetitive.
+  # TODO Why doesn't this handle child_spec when it's passed above?
+  def handle_call({:restart_child, old_pid}, _from, state) do
+    case HashDict.fetch(state, old_pid) do
+      {:ok, child_spec} ->
+        case restart_child(old_pid, child_spec) do
+          {:ok, {pid, child_spec}} ->
+            new_state = state
+                        |> HashDict.delete(old_pid)
+                        |> HashDict.put(pid, child_spec)
+            {:reply, {:ok, pid}, new_state}
+          :error ->
+            {:reply, {:error, "error restarting child"}, state}
+        end
+      _ ->
+        {:reply, :ok, state}
+    end
+  end
+
+  def handle_call(:count_children, _from, state) do
+    {:reply, HashDict.size(state), state}
+  end
+
+  # TODO Why do we handle state here and in handle_info? Seems repetitive.
   def handle_call({:terminate_child, pid}, _from, state) do
     case terminate_child(pid) do
       :ok ->
@@ -48,7 +79,7 @@ defmodule ThySupervisor do
     end
   end
 
-  # Comment this out to test redundancy theory. Looks like it is.
+  # TODO Comment this out to test redundancy theory. Looks like it is.
   def handle_info({:EXIT, from, :killed}, state) do
     new_state = state |> HashDict.delete(from)
     {:no_reply, new_state}
@@ -78,5 +109,19 @@ defmodule ThySupervisor do
   defp terminate_child(pid) do
     Process.exit(pid, :kill)
     :ok
+  end
+
+  defp restart_child(pid, child_spec) when is_pid(pid) do
+    case terminate_child(pid) do
+      :ok ->
+        case start_child(child_spec) do
+          {:ok, new_pid} ->
+            {:ok, {new_pid, child_spec}}
+          :error ->
+            :error
+        end
+      :error ->
+        :error
+    end
   end
 end
