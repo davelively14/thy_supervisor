@@ -103,6 +103,23 @@ defmodule ThySupervisor do
     {:no_reply, new_state}
   end
 
+  def handle_info({:EXIT, old_pid, _reason}, state) do
+    case HashDict.fetch(state, old_pid) do
+      {:ok, child_spec} ->
+        case restart_child(old_pid, child_spec) do
+          {:ok, {pid, child_spec}} ->
+            new_state = state
+                        |> HashDict.delete(old_pid)
+                        |> HashDict.put(pid, child_spec)
+            {:no_reply, state}
+          :error ->
+            {:no_reply, state}
+        end
+      _ ->
+        {:no_reply, state}
+    end
+  end
+
   # Private functions
 
   defp start_child({mod, fun, args}) do
